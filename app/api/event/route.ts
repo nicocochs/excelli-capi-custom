@@ -24,7 +24,7 @@ export async function OPTIONS() {
 
 export async function POST(req: Request) {
   try {
-    const { email, phone, firstName, fbp, fbc, clientIp, clientUserAgent } =
+    const { email, phone, firstName, fbp, fbc, clientIp, clientUserAgent, eventName } =
       await req.json()
 
     const userData: Record<string, string> = {}
@@ -39,7 +39,7 @@ export async function POST(req: Request) {
     const payload = {
       data: [
         {
-          event_name: 'consulta_solicitada',
+          event_name: eventName || 'consulta_solicitada',
           event_time: Math.floor(Date.now() / 1000),
           action_source: 'website',
           event_source_url: 'https://momentodemudanca.com',
