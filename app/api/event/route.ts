@@ -24,7 +24,7 @@ export async function OPTIONS() {
 
 export async function POST(req: Request) {
   try {
-    const { email, phone, firstName, fbp, fbc, clientIp, clientUserAgent, eventName } =
+    const { email, phone, firstName, fbp, fbc, clientIp, clientUserAgent, eventName, testCode } =
       await req.json()
 
     const userData: Record<string, string> = {}
@@ -47,6 +47,7 @@ export async function POST(req: Request) {
         },
       ],
       access_token: CAPI_TOKEN,
+      ...(testCode ? { test_event_code: testCode } : {}),
     }
 
     const res = await fetch(CAPI_URL, {
