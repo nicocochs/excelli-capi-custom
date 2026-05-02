@@ -24,7 +24,7 @@ export async function OPTIONS() {
 
 export async function POST(req: Request) {
   try {
-    const { email, phone, firstName, fbp, fbc, clientIp, clientUserAgent, eventName, testCode } =
+    const { email, phone, firstName, fbp, fbc, clientIp, clientUserAgent, eventName, testCode, value, currency } =
       await req.json()
 
     const userData: Record<string, string> = {}
@@ -44,6 +44,7 @@ export async function POST(req: Request) {
           action_source: 'website',
           event_source_url: 'https://momentodemudanca.com',
           user_data: userData,
+          ...(value && currency ? { value: parseFloat(value), currency } : {}),
         },
       ],
       access_token: CAPI_TOKEN,
