@@ -27,6 +27,12 @@ export async function POST(req: Request) {
     const { email, phone, firstName, fbp, fbc, clientIp, clientUserAgent, eventName, testCode, value, currency } =
       await req.json()
 
+    console.log('[capi-request]', JSON.stringify({
+      eventName: eventName || 'consulta_solicitada',
+      email: email ? 'present' : 'missing',
+      phone: phone ? 'present' : 'missing',
+    }))
+
     const userData: Record<string, string> = {}
     if (email)           userData.em = sha256(email)
     if (phone)           userData.ph = sha256(normalizePhone(phone))
