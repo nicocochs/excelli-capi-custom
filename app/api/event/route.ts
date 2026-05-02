@@ -24,13 +24,13 @@ export async function OPTIONS() {
 
 export async function POST(req: Request) {
   try {
-    const { email, phone, firstName, fbp, fbc, clientIp, clientUserAgent, eventName, testCode, value, currency } =
-      await req.json()
+    const body = await req.json()
+    const { email, phone, firstName, fbp, fbc, clientIp, clientUserAgent, eventName, testCode, value, currency } = body
 
     console.log('[capi-request]', JSON.stringify({
-      eventName: eventName || 'consulta_solicitada',
-      email: email ? 'present' : 'missing',
-      phone: phone ? 'present' : 'missing',
+      rawBody: body,
+      eventName: body.eventName,
+      finalEventName: body.eventName || 'consulta_solicitada',
     }))
 
     const userData: Record<string, string> = {}
