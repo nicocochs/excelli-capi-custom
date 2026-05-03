@@ -40,7 +40,7 @@ export async function POST(req: Request) {
       eventName,
       email: email ? 'present' : 'missing',
       phone: phone ? 'present' : 'missing',
-      source: body.customData ? 'customData' : 'root',
+      source: body.eventName ? 'root' : 'customData',
     }))
 
     const userData: Record<string, string> = {}
