@@ -30,6 +30,7 @@ export async function POST(req: Request) {
     const email     = body.email     || cd.email
     const phone     = body.phone     || cd.phone
     const firstName = body.firstName || cd.firstName
+    const lastName  = body.lastName  || cd.lastName
     const eventName = body.eventName || cd.eventName || 'consulta_solicitada'
     const value     = body.value     || cd.value
     const currency  = body.currency  || cd.currency
@@ -47,6 +48,7 @@ export async function POST(req: Request) {
     if (email)           userData.em = sha256(email)
     if (phone)           userData.ph = sha256(normalizePhone(phone))
     if (firstName)       userData.fn = sha256(firstName)
+    if (lastName)        userData.ln = sha256(lastName)
     if (fbp)             userData.fbp = fbp
     if (fbc)             userData.fbc = fbc
     if (clientIp)        userData.client_ip_address = clientIp
