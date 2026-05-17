@@ -34,8 +34,11 @@ export async function POST(req: Request) {
     const eventName = body.eventName || cd.eventName || 'consulta_solicitada'
     const value     = body.value     || cd.value
     const currency  = body.currency  || cd.currency
-    const testCode  = body.testCode  || cd.testCode
-    const { fbp, fbc, clientIp, clientUserAgent } = body
+    const testCode        = body.testCode        || cd.testCode
+    const fbp             = body.fbp             || cd.fbp
+    const fbc             = body.fbc             || cd.fbc
+    const clientIp        = body.clientIp        || cd.clientIp
+    const clientUserAgent = body.clientUserAgent || cd.clientUserAgent
 
     console.log('[capi-request]', JSON.stringify({
       eventName,
