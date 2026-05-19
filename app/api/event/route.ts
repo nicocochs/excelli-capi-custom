@@ -39,6 +39,8 @@ export async function POST(req: Request) {
     const fbc             = body.fbc             || cd.fbc
     const clientIp        = body.clientIp        || cd.clientIp
     const clientUserAgent = body.clientUserAgent || cd.clientUserAgent
+    const eventTimeIn     = body.event_time      ?? cd.event_time
+    const skipStandard    = body.skipStandard    ?? cd.skipStandard ?? false
 
     console.log('[capi-request]', {
       eventName,
@@ -63,15 +65,17 @@ export async function POST(req: Request) {
       fbp: fbp || undefined,
     }
 
-    const event_time = Math.floor(Date.now() / 1000)
-    const skipLead = eventName === 'servicio_confirmado' || eventName === 'servicio_cerrado'
+    const event_time = typeof eventTimeIn === 'number' && Number.isFinite(eventTimeIn)
+      ? Math.floor(eventTimeIn)
+      : Math.floor(Date.now() / 1000)
+    const skipLead = skipStandard === true || eventName === 'servicio_confirmado' || eventName === 'servicio_cerrado'
 
     const customEvent = {
       event_name: eventName,
       event_time,
       action_source: 'website',
       event_source_url: pageUrl,
-      event_id: eventId ? eventId + '_cs' : undefined,
+      event_id: eventId ? (skipLead ? eventId : eventId + '_cs') : undefined,
       user_data,
       ...(value && currency ? { value: parseFloat(value), currency } : {}),
     }
