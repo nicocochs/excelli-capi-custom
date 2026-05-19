@@ -10,12 +10,8 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type',
 }
 
-function sha256(value: string): string {
+function hash(value: string): string {
   return createHash('sha256').update(value.trim().toLowerCase()).digest('hex')
-}
-
-function normalizePhone(phone: string): string {
-  return phone.replace(/\D/g, '')
 }
 
 export async function OPTIONS() {
@@ -31,7 +27,11 @@ export async function POST(req: Request) {
     const phone     = body.phone     || cd.phone
     const firstName = body.firstName || cd.firstName
     const lastName  = body.lastName  || cd.lastName
+    const city      = body.city      || cd.city
+    const state     = body.state     || cd.state
     const eventName = body.eventName || cd.eventName || 'consulta_solicitada'
+    const eventId   = body.eventId   || cd.eventId
+    const pageUrl   = body.pageUrl   || cd.pageUrl   || 'https://momentodemudanca.com'
     const value     = body.value     || cd.value
     const currency  = body.currency  || cd.currency
     const testCode        = body.testCode        || cd.testCode
@@ -40,34 +40,53 @@ export async function POST(req: Request) {
     const clientIp        = body.clientIp        || cd.clientIp
     const clientUserAgent = body.clientUserAgent || cd.clientUserAgent
 
-    console.log('[capi-request]', JSON.stringify({
+    console.log('[capi-request]', {
       eventName,
       email: email ? 'present' : 'missing',
-      phone: phone ? 'present' : 'missing',
+      fbc: fbc ? 'present' : 'missing',
+      fbp: fbp ? 'present' : 'missing',
+      eventId: eventId ? 'present' : 'missing',
       source: body.eventName ? 'root' : 'customData',
-    }))
+    })
 
-    const userData: Record<string, string> = {}
-    if (email)           userData.em = sha256(email)
-    if (phone)           userData.ph = sha256(normalizePhone(phone))
-    if (firstName)       userData.fn = sha256(firstName)
-    if (lastName)        userData.ln = sha256(lastName)
-    if (fbp)             userData.fbp = fbp
-    if (fbc)             userData.fbc = fbc
-    if (clientIp)        userData.client_ip_address = clientIp
-    if (clientUserAgent) userData.client_user_agent = clientUserAgent
+    const user_data = {
+      em: email ? [hash(email)] : [],
+      ph: phone ? [hash(phone.replace(/\D/g, ''))] : [],
+      fn: firstName ? [hash(firstName)] : [],
+      ln: lastName ? [hash(lastName)] : [],
+      ct: city ? [hash(city)] : [],
+      st: state ? [hash(state)] : [],
+      country: [hash('br')],
+      client_ip_address: clientIp || undefined,
+      client_user_agent: clientUserAgent || undefined,
+      fbc: fbc || undefined,
+      fbp: fbp || undefined,
+    }
+
+    const event_time = Math.floor(Date.now() / 1000)
+    const skipLead = eventName === 'servicio_confirmado' || eventName === 'servicio_cerrado'
+
+    const customEvent = {
+      event_name: eventName,
+      event_time,
+      action_source: 'website',
+      event_source_url: pageUrl,
+      event_id: eventId ? eventId + '_cs' : undefined,
+      user_data,
+      ...(value && currency ? { value: parseFloat(value), currency } : {}),
+    }
+
+    const leadEvent = {
+      event_name: 'Lead',
+      event_time,
+      action_source: 'website',
+      event_source_url: pageUrl,
+      event_id: eventId,
+      user_data,
+    }
 
     const payload = {
-      data: [
-        {
-          event_name: eventName || 'consulta_solicitada',
-          event_time: Math.floor(Date.now() / 1000),
-          action_source: 'website',
-          event_source_url: 'https://momentodemudanca.com',
-          user_data: userData,
-          ...(value && currency ? { value: parseFloat(value), currency } : {}),
-        },
-      ],
+      data: skipLead ? [customEvent] : [leadEvent, customEvent],
       access_token: CAPI_TOKEN,
       ...(testCode ? { test_event_code: testCode } : {}),
     }
