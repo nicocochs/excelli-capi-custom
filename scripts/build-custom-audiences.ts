@@ -1,20 +1,22 @@
 /**
  * Build 3 Meta Custom Audience CSVs from GHL Excelli pipelines.
  *
- * Outputs (SHA256-hashed, ready for "Customer File" upload in Meta Ads Manager):
- *   ./out/audiencia_leads.csv      — current stage = LEAD / LEAD VSL
- *   ./out/audiencia_agendaron.csv  — current stage = AGENDADO
- *   ./out/audiencia_compraron.csv  — current stage = COMPRO
+ * Matches Meta's official "Customer File" template format (plain text — Meta
+ * hashes server-side on upload). Headers per Meta's example file.
  *
- * Each row: email,phone,fn,ln,ct,st,country (all sha256 of normalized values).
- * Meta detects hashing automatically; mark each column as "Hashed" during upload.
+ * Outputs:
+ *   ./out/audiencia_leads.csv      — current stage = LEAD / LEAD VSL
+ *                                    headers: email,phone,fn,ln,zip,ct,st,country
+ *   ./out/audiencia_agendaron.csv  — current stage = AGENDADO
+ *                                    headers: email,phone,fn,ln,zip,ct,st,country
+ *   ./out/audiencia_compraron.csv  — current stage = COMPRO  [VALUE-BASED]
+ *                                    headers: ...,uid,value  (enables Lookalike-by-value)
  *
  * Usage: npx tsx scripts/build-custom-audiences.ts
  */
 
 import fs from 'fs'
 import path from 'path'
-import { createHash } from 'crypto'
 
 const ENV_PATH = path.resolve('.env.local')
 if (fs.existsSync(ENV_PATH)) {
@@ -24,10 +26,10 @@ if (fs.existsSync(ENV_PATH)) {
   }
 }
 
-const LOCATION_ID = process.env.GHL_LOCATION_ID || 'BnzFuaPdm0o7YAbKDL3t'
-const GHL_TOKEN   = process.env.GHL_API_KEY     || 'pit-f88ca86e-4c8a-45d3-b7c7-0439957a6d3c'
+const LOCATION_ID = process.env.GHL_LOCATION_ID
+const GHL_TOKEN   = process.env.GHL_API_KEY
+if (!LOCATION_ID || !GHL_TOKEN) { console.error('Missing GHL_LOCATION_ID or GHL_API_KEY (set them in .env.local)'); process.exit(1) }
 const OUT_DIR     = path.resolve('out')
-const COUNTRY     = 'br'
 
 type Bucket = 'leads' | 'agendaron' | 'compraron'
 
@@ -49,7 +51,7 @@ const ghlHeaders = {
 }
 
 interface GhlContact { id: string; name?: string; email?: string; phone?: string }
-interface GhlOpportunity { id: string; contactId: string; contact?: GhlContact }
+interface GhlOpportunity { id: string; contactId: string; monetaryValue?: number; contact?: GhlContact }
 interface OpportunityPage {
   opportunities: GhlOpportunity[]
   meta?: { startAfter?: number; startAfterId?: string }
@@ -84,44 +86,58 @@ async function fetchContact(contactId: string): Promise<ContactDetail | null> {
   return json.contact || null
 }
 
-const sha = (v: string) => createHash('sha256').update(v).digest('hex')
-const normEmail = (v: string) => v.trim().toLowerCase()
-const normPhone = (v: string) => v.replace(/\D/g, '')                           // digits-only, with country code
-const normName  = (v: string) => v.trim().toLowerCase().replace(/[^a-z0-9]/g, '')
-const normPlace = (v: string) => v.trim().toLowerCase().replace(/[^a-z0-9]/g, '')
+// Match Meta's "Customer File" plain-text template (Meta hashes server-side).
+// See: example_value_based_audience_file.csv shared by Meta.
 
 interface Row {
-  email_sha256: string
-  phone_sha256: string
-  fn_sha256: string
-  ln_sha256: string
-  ct_sha256: string
-  st_sha256: string
-  country_sha256: string
+  email: string
+  phone: string
+  fn: string
+  ln: string
+  zip: string
+  ct: string
+  st: string
+  country: string
+  // value-based only (compraron):
+  uid?: string
+  value?: string
 }
 
-function toRow(c: ContactDetail | null, fallback: GhlOpportunity): Row | null {
-  const email = c?.email || fallback.contact?.email
-  const phone = c?.phone || fallback.contact?.phone
+function csvEscape(v: string): string {
+  if (v === '' || v == null) return ''
+  return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v
+}
+
+function toRow(c: ContactDetail | null, fallback: GhlOpportunity, withValue: boolean): Row | null {
+  const email = (c?.email || fallback.contact?.email || '').trim()
+  const phone = (c?.phone || fallback.contact?.phone || '').trim()
   if (!email && !phone) return null
   const nameParts = (c?.firstName ? [c.firstName, c.lastName].filter(Boolean) : (fallback.contact?.name || '').split(' '))
-  const firstName = c?.firstName || nameParts[0] || ''
-  const lastName  = c?.lastName  || nameParts.slice(1).join(' ') || ''
-  return {
-    email_sha256:   email ? sha(normEmail(email)) : '',
-    phone_sha256:   phone ? sha(normPhone(phone)) : '',
-    fn_sha256:      firstName ? sha(normName(firstName)) : '',
-    ln_sha256:      lastName  ? sha(normName(lastName))  : '',
-    ct_sha256:      c?.city  ? sha(normPlace(c.city))    : '',
-    st_sha256:      c?.state ? sha(normPlace(c.state))   : '',
-    country_sha256: sha(COUNTRY),
+  const firstName = (c?.firstName || nameParts[0] || '').trim()
+  const lastName  = (c?.lastName  || nameParts.slice(1).join(' ') || '').trim()
+  const row: Row = {
+    email,
+    phone,
+    fn:      firstName,
+    ln:      lastName,
+    zip:     '',
+    ct:      (c?.city  || '').trim(),
+    st:      (c?.state || '').trim(),
+    country: 'BR',
   }
+  if (withValue) {
+    row.uid   = fallback.id
+    row.value = fallback.monetaryValue != null ? String(fallback.monetaryValue) : ''
+  }
+  return row
 }
 
-function writeCSV(filePath: string, rows: Row[]): void {
-  const headers = ['email_sha256', 'phone_sha256', 'fn_sha256', 'ln_sha256', 'ct_sha256', 'st_sha256', 'country_sha256']
+function writeCSV(filePath: string, rows: Row[], valueBased: boolean): void {
+  const headers = valueBased
+    ? ['email', 'phone', 'fn', 'ln', 'zip', 'ct', 'st', 'country', 'uid', 'value']
+    : ['email', 'phone', 'fn', 'ln', 'zip', 'ct', 'st', 'country']
   const lines = [headers.join(',')]
-  for (const r of rows) lines.push(headers.map(h => r[h as keyof Row]).join(','))
+  for (const r of rows) lines.push(headers.map(h => csvEscape(String(r[h as keyof Row] ?? ''))).join(','))
   fs.writeFileSync(filePath, lines.join('\n') + '\n', 'utf-8')
 }
 
@@ -156,7 +172,7 @@ async function main() {
     const opp = oppByContact.get(contactId)!
     let detail: ContactDetail | null = null
     try { detail = await fetchContact(contactId) } catch { /* fallback */ }
-    const row = toRow(detail, opp)
+    const row = toRow(detail, opp, bucket === 'compraron')
     if (!row) { skippedNoIdent++; continue }
     buckets[bucket].set(contactId, row)
     enriched++
@@ -168,8 +184,9 @@ async function main() {
     const filename = `audiencia_${bucket}.csv`
     const filePath = path.join(OUT_DIR, filename)
     const rows = Array.from(buckets[bucket].values())
-    writeCSV(filePath, rows)
-    console.log(`✓ ${filename.padEnd(28)} ${String(rows.length).padStart(4)} rows  →  ${filePath}`)
+    const valueBased = bucket === 'compraron'
+    writeCSV(filePath, rows, valueBased)
+    console.log(`✓ ${filename.padEnd(28)} ${String(rows.length).padStart(4)} rows  ${valueBased ? '[value-based]' : ''}  →  ${filePath}`)
   }
   console.log(`${'─'.repeat(72)}`)
   console.log(`opps scanned: ${totalOpps}   unique contacts: ${winningBucket.size}   no-email/no-phone: ${skippedNoIdent}   (highest-stage wins per contact)\n`)

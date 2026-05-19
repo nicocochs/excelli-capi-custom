@@ -29,8 +29,9 @@ if (fs.existsSync(ENV_PATH)) {
   }
 }
 
-const LOCATION_ID = process.env.GHL_LOCATION_ID || 'BnzFuaPdm0o7YAbKDL3t'
-const GHL_TOKEN   = process.env.GHL_API_KEY     || 'pit-f88ca86e-4c8a-45d3-b7c7-0439957a6d3c'
+const LOCATION_ID = process.env.GHL_LOCATION_ID
+const GHL_TOKEN   = process.env.GHL_API_KEY
+if (!LOCATION_ID || !GHL_TOKEN) { console.error('Missing GHL_LOCATION_ID or GHL_API_KEY (set them in .env.local)'); process.exit(1) }
 const OUT_DIR     = path.resolve('out')
 
 const VALUE_LEAD     = 1
